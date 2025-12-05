@@ -230,12 +230,6 @@ void arena_print_stats(Arena *a)
 			total_used);
 }
 
-
-/* =================== */
-/* STRING MANIPULATION */
-/* =================== */
-
-/* Custom strjoin */
 char* arena_sprintf(Arena *a, const char *fmt, ...)
 {
     va_list args, args_copy;
