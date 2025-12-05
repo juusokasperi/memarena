@@ -85,6 +85,6 @@ bool arena_set_prot(Arena *a, int prot);
 void arena_print_stats(Arena *a);
 
 // Sprintf that allocates to the arena
-char* arena_sprintf(Arena *a, const char *fmt, ...);
+char* arena_sprintf(Arena *a, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
 
 #endif
