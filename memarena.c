@@ -143,6 +143,7 @@ void arena_temp_end(ArenaTemp temp)
 		ASAN_POISON_MEMORY_REGION(
 				(char *)temp.arena->curr + temp.pos.offset,
 				old_offset - temp.pos.offset);
+		(void)old_offset;
 	}
 }
 
