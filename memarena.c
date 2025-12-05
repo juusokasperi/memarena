@@ -3,7 +3,7 @@
 static size_t 		get_page_size(void);
 static size_t 		align_to_page(size_t size);
 static uintptr_t 	align_forward(uintptr_t ptr, size_t align);
-static ArenaBlock	*arena_create_block(size_t capacity, int prot);
+static ArenaBlock	*arena_create_block(size_t capacity, int prot, ArenaBlock *prev_block);
 
 Arena arena_init(int prot)
 {
@@ -11,7 +11,7 @@ Arena arena_init(int prot)
 	a.prot = prot;
 
 #ifdef MEMARENA_DISABLE_RESIZE
-	a.curr = arena_create_block(MEMARENA_DEFAULT_SIZE, prot);
+	a.curr = arena_create_block(MEMARENA_DEFAULT_SIZE, prot, NULL);
 #endif
 
 	return (a);
@@ -83,16 +83,18 @@ void *arena_alloc_aligned(Arena *a, size_t size, size_t align)
 #else
 		size_t needed = size + align;
 		size_t next_size = (needed > MEMARENA_DEFAULT_SIZE) ? needed : MEMARENA_DEFAULT_SIZE;
-		ArenaBlock *new_block = arena_create_block(next_size, a->prot);
+		ArenaBlock *new_block = arena_create_block(next_size, a->prot, a->curr);
 		if (!new_block)
 			return (NULL);
-		new_block->prev = a->curr;
-		a->curr = new_block;
+		if (new_block != a->curr)
+		{
+			a->curr = new_block;
 
-		base_addr = (uintptr_t)a->curr;
-		current_addr = base_addr + a->curr->offset;
-		aligned_addr = align_forward(current_addr, align);
-		padding = aligned_addr - current_addr;
+			base_addr = (uintptr_t)a->curr;
+			current_addr = base_addr + a->curr->offset;
+			aligned_addr = align_forward(current_addr, align);
+			padding = aligned_addr - current_addr;
+		}
 #endif
 	}
 
@@ -244,17 +246,28 @@ static uintptr_t align_forward(uintptr_t ptr, size_t align)
 	return (ptr);
 }
 
-static ArenaBlock *arena_create_block(size_t capacity, int prot)
+static ArenaBlock *arena_create_block(size_t capacity, int prot, ArenaBlock *prev_block)
 {
-	size_t total_needed = capacity + sizeof(ArenaBlock);
-	size_t total_size = align_to_page(total_needed);
+	void	*hint_addr = NULL;
+	if (prev_block)
+		hint_addr = (void *)((char *)prev_block + prev_block->size);
 
-	void *base = mmap(NULL, total_size, prot, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+	size_t	total_needed = capacity + sizeof(ArenaBlock);
+	size_t	total_size = align_to_page(total_needed);
+
+	void *base = mmap(hint_addr, total_size, prot, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
 	if (base == MAP_FAILED)
-		return NULL;
+		return (NULL);
 	
+	if (prev_block && base == hint_addr)
+	{
+		prev_block->size += total_size;
+		ASAN_POISON_MEMORY_REGION(base, total_size);
+		return (prev_block);
+	}
+
 	ArenaBlock *block = (ArenaBlock *)base;
-	block->prev = NULL;
+	block->prev = prev_block;
 	block->size = total_size;
 	block->offset = sizeof(ArenaBlock);
 

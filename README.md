@@ -4,13 +4,14 @@ A growable Memory Arena (Region) allocator for C.
 
 ## Features
 
-- O(1) Allocation: allocation is just a pointer bump.
+- O(1) allocation: allocation is just a pointer bump.
 - Infinite growth: Uses a linked list of mmap'd blocks. Never runs out of memory until the OS does.
+- Contiguous merging: Attemps to merge new memory blocks adjacent to the previous block. If successful, this extends the previous block's virtual memory range instead of appending to the linked list, reducing fragmentation.
 - ASAN Integration: Manually "poisons" unused memory. If you access memory you haven't allocated (or after a reset), ASAN will crash your program with a precise error.
-- Page Aware: Automatically aligns large allocations to OS page boundaries (4KB/16KB) to eliminate internal fragmentation.
-- Instant Cleanup: Free millions of objects in O(1) time by freeing the arena or resetting the offset.
-- Thread-Local Ready: Designed to be used as thread-local storage (no internal mutexes for maximum speed).
-- Fixed Mode: Optional compile-time flag `MEM_ARENA_DISABLE_RESIZE` to disable growth and pre-allocate memory.
+- Page aware: Automatically aligns large allocations to OS page boundaries (4KB/16KB) to eliminate internal fragmentation.
+- Instant cleanup: Free millions of objects in O(1) time by freeing the arena or resetting the offset.
+- Thread-Local ready: Designed to be used as thread-local storage (no internal mutexes for maximum speed).
+- Fixed mode: Optional compile-time flag `MEM_ARENA_DISABLE_RESIZE` to disable growth and pre-allocate memory.
 
 ## Installation
 
@@ -117,6 +118,8 @@ You can tweak the default block size in `memarena.h` or by compiling with `-DMEM
 ### Statistics
 
 You can inspect the efficiency of your arena at any time. This is useful for tuning your MEMARENA_DEFAULT_SIZE.
+
+*Note: If "Blocks" remains low even after allocating more than the default size, it means the arena successfully merged the new allocations into a contiguous block.*
 
 ```c 
 arena_print_stats(&arena);
