@@ -1,20 +1,33 @@
-#include "memarena.h"
+#include "../memarena.h"
 
-// cc -fsanitize=address -g tester.c memarena.c -o tester 
+// cc -fsanitize=address -g tester/tester.c memarena.c -o tester 
 
 #define YELLOW "\033[0;93m"
 #define GREEN_B "\033[1;92m"
 #define RED_B "\033[1;91m"
 #define RESET "\033[0m"
 
+#define FLAG_POISON 0x01 
+#define FLAG_ALIGN 0x02 
+#define FLAG_ALL 0xFF
+
 static void page_alignment(void);
 static void poison(void);
+static uint8_t check_flags(int argc, char **argv);
 
-int main()
+int main(int argc, char **argv)
 {
-	page_alignment();
-	poison();
-    return 0;
+	if (argc < 2)
+	{
+		page_alignment();
+		return (0);
+	}
+	uint8_t flags = check_flags(argc, argv);
+	if (flags & FLAG_ALIGN)
+		page_alignment();
+	if (flags & FLAG_POISON)
+		poison();
+    return (1);
 }
 
 static void poison(void)
@@ -31,7 +44,7 @@ static void poison(void)
     nums[0] = 42;
     printf("  %s>> Wrote to the block:%s %d\n", YELLOW, RESET, nums[0]);
     printf("  %s>> Checking arena statistics.%s\n", YELLOW, RESET);
-    printf("    >> Expect to see %dMB allocated (our minimum).\n\n", ARENA_DEFAULT_SIZE / 1024 / 1024);
+    printf("    >> Expect to see %dMB allocated (our minimum).\n\n", MEMARENA_DEFAULT_SIZE / 1024 / 1024);
 	arena_print_stats(&a);
 
     printf("  \n%s>> Allocating 70MB%s\n", GREEN_B, RESET);
@@ -104,3 +117,34 @@ static void page_alignment(void)
     arena_free(&a2);
 }
 
+static uint8_t check_flags(int argc, char **argv)
+{
+	uint8_t flags = 0;
+	bool help_printed = false;
+
+	if (argc < 2)
+		return (flags);
+	for (int i = 1; i < argc; ++i)
+	{
+		if (strcmp(argv[i], "--poison") == 0)
+			flags |= FLAG_POISON;
+		else if (strcmp(argv[i], "--align") == 0)
+			flags |= FLAG_ALIGN;
+		else if (strcmp(argv[i], "--all") == 0)
+			flags = FLAG_ALL;
+		else if (strcmp(argv[i], "--help") == 0)
+		{
+			if (!help_printed)
+			{
+				printf("%sHow to use tester:%s\n", GREEN_B, RESET);
+				printf("Accepts flags --poison, --align, --all, --help\n");
+				printf("By default, runs with --align\n");
+				printf("Remember to compile with -g and -fsanitize=address for the poison test\n");
+				help_printed = true;
+			}
+		}
+		else
+			printf("%sWarning%s: Invalid flag %s\n", "\033[0;91m", "\033[0m", argv[i]);
+	}
+	return (flags);
+}
