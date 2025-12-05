@@ -1,115 +1,32 @@
 #include "memarena.h"
 
-/* ======================== */
-/* FUNCTION IMPLEMENTATIONS */
-/* ======================== */
-
-static size_t get_page_size(void)
-{
-	static size_t page_size = 0;
-	if (page_size == 0)
-	{
-		long res = sysconf(_SC_PAGESIZE);
-		page_size = (res > 0) ? (size_t)res : 4096;
-	}
-	return (page_size);
-}
-
-static size_t align_to_page(size_t size)
-{
-	size_t page_size = get_page_size();
-	return (size + page_size - 1) & ~(page_size - 1);
-}
-
-static uintptr_t align_forward(uintptr_t ptr, size_t align)
-{
-	uintptr_t a = (uintptr_t)align;
-	uintptr_t modulo = ptr & (a - 1);
-	if (modulo != 0)
-		ptr += a - modulo;
-	return (ptr);
-}
-
-static ArenaBlock* arena_create_block(size_t capacity, int prot)
-{
-	size_t total_needed = capacity + sizeof(ArenaBlock);
-	size_t total_size = align_to_page(total_needed);
-
-	void *base = mmap(NULL, total_size, prot, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
-	if (base == MAP_FAILED)
-		return NULL;
-	
-	ArenaBlock* block = (ArenaBlock *)base;
-	block->prev = NULL;
-	block->size = total_size;
-	block->offset = sizeof(ArenaBlock);
-
-	ASAN_POISON_MEMORY_REGION((char*)base + sizeof(ArenaBlock), total_size - sizeof(ArenaBlock));
-
-	return(block);
-}
+static size_t 		get_page_size(void);
+static size_t 		align_to_page(size_t size);
+static uintptr_t 	align_forward(uintptr_t ptr, size_t align);
+static ArenaBlock	*arena_create_block(size_t capacity, int prot);
 
 Arena arena_init(int prot)
 {
 	Arena a = {0};
 	a.prot = prot;
+
+#ifdef MEMARENA_DISABLE_RESIZE
+	a.curr = arena_create_block(MEMARENA_DEFAULT_SIZE, prot);
+#endif
+
 	return (a);
 }
 
-void* arena_alloc_aligned(Arena *a, size_t size, size_t align)
+void arena_free(Arena *a)
 {
-	if (size == 0)
-		return (NULL);
-	if (!is_power_of_two(align))
-		return (NULL);
-	if (a->curr == NULL)
+	ArenaBlock *curr = a->curr;
+	while (curr)
 	{
-		size_t block_size = (size > ARENA_DEFAULT_SIZE) ? size : ARENA_DEFAULT_SIZE;
-		a->curr = arena_create_block(block_size, a->prot);
-		if (!a->curr)
-			return (NULL);
+		ArenaBlock *prev = curr->prev;
+		munmap(curr, curr->size);
+		curr = prev;
 	}
-
-	uintptr_t base_addr = (uintptr_t)a->curr;
-	uintptr_t current_addr = base_addr + a->curr->offset;
-	uintptr_t aligned_addr = align_forward(current_addr, align);
-	size_t padding = aligned_addr - current_addr;
-
-	if (a->curr->offset + padding + size > a->curr->size)
-	{
-		size_t needed = size + align;
-		size_t next_size = (needed > ARENA_DEFAULT_SIZE) ? needed : ARENA_DEFAULT_SIZE;
-		ArenaBlock *new_block = arena_create_block(next_size, a->prot);
-		if (!new_block)
-			return (NULL);
-		new_block->prev = a->curr;
-		a->curr = new_block;
-
-		base_addr = (uintptr_t)a->curr;
-		current_addr = base_addr + a->curr->offset;
-		aligned_addr = align_forward(current_addr, align);
-		padding = aligned_addr - current_addr;
-	}
-
-	a->curr->offset += padding;
-	void *ptr = (void *)(base_addr + a->curr->offset);
-	ASAN_UNPOISON_MEMORY_REGION(ptr, size);
-
-	a->curr->offset += size;
-	return (ptr);
-}
-
-void* arena_alloc(Arena *a, size_t size)
-{
-	return (arena_alloc_aligned(a, size, DEFAULT_ALIGNMENT));
-}
-
-void* arena_alloc_zeroed(Arena *a, size_t size)
-{
-   void *ptr = arena_alloc(a, size);
-    if (ptr)
-        memset(ptr, 0, size);
-    return (ptr);
+	a->curr = NULL;
 }
 
 void arena_reset(Arena *a)
@@ -131,30 +48,68 @@ void arena_reset(Arena *a)
 			a->curr->size - sizeof(ArenaBlock));
 }
 
-void arena_free(Arena *a)
+void *arena_alloc(Arena *a, size_t size)
 {
-	ArenaBlock *curr = a->curr;
-	while (curr)
-	{
-		ArenaBlock *prev = curr->prev;
-		munmap(curr, curr->size);
-		curr = prev;
-	}
-	a->curr = NULL;
+	return (arena_alloc_aligned(a, size, DEFAULT_ALIGNMENT));
 }
 
-bool arena_set_prot(Arena *a, int prot)
+void *arena_alloc_aligned(Arena *a, size_t size, size_t align)
 {
-	ArenaBlock *curr = a->curr;
-	while (curr)
+	if (size == 0)
+		return (NULL);
+	if (!is_power_of_two(align))
+		return (NULL);
+	if (a->curr == NULL)
 	{
-		if (mprotect(curr, curr->size, prot) == -1)
-			return (false);
-		curr = curr->prev;
+#ifdef MEMARENA_DISABLE_RESIZE
+		return (NULL);
+#else
+		size_t block_size = (size > MEMARENA_DEFAULT_SIZE) ? size : MEMARENA_DEFAULT_SIZE;
+		a->curr = arena_create_block(block_size, a->prot);
+		if (!a->curr)
+			return (NULL);
+#endif
 	}
 
-	a->prot = prot;
-	return (true);
+	uintptr_t base_addr = (uintptr_t)a->curr;
+	uintptr_t current_addr = base_addr + a->curr->offset;
+	uintptr_t aligned_addr = align_forward(current_addr, align);
+	size_t padding = aligned_addr - current_addr;
+
+	if (a->curr->offset + padding + size > a->curr->size)
+	{
+#ifdef MEMARENA_DISABLE_RESIZE
+		return (NULL);
+#else
+		size_t needed = size + align;
+		size_t next_size = (needed > MEMARENA_DEFAULT_SIZE) ? needed : MEMARENA_DEFAULT_SIZE;
+		ArenaBlock *new_block = arena_create_block(next_size, a->prot);
+		if (!new_block)
+			return (NULL);
+		new_block->prev = a->curr;
+		a->curr = new_block;
+
+		base_addr = (uintptr_t)a->curr;
+		current_addr = base_addr + a->curr->offset;
+		aligned_addr = align_forward(current_addr, align);
+		padding = aligned_addr - current_addr;
+#endif
+	}
+
+	a->curr->offset += padding;
+	void *ptr = (void *)(base_addr + a->curr->offset);
+	ASAN_UNPOISON_MEMORY_REGION(ptr, size);
+
+	a->curr->offset += size;
+	return (ptr);
+}
+
+void *arena_alloc_zeroed(Arena *a, size_t size)
+{
+   void *ptr = arena_alloc(a, size);
+    if (ptr)
+        memset(ptr, 0, size);
+    return (ptr);
 }
 
 ArenaTemp arena_temp_begin(Arena *a)
@@ -186,7 +141,7 @@ void arena_temp_end(ArenaTemp temp)
 		size_t old_offset = temp.arena->curr->offset;
 		temp.arena->curr->offset = temp.pos.offset;
 		ASAN_POISON_MEMORY_REGION(
-				(char*)temp.arena->curr + temp.pos.offset,
+				(char *)temp.arena->curr + temp.pos.offset,
 				old_offset - temp.pos.offset);
 	}
 }
@@ -201,6 +156,20 @@ size_t arena_total_used(Arena *a)
 		curr = curr->prev;
 	}
 	return (total);
+}
+
+bool arena_set_prot(Arena *a, int prot)
+{
+	ArenaBlock *curr = a->curr;
+	while (curr)
+	{
+		if (mprotect(curr, curr->size, prot) == -1)
+			return (false);
+		curr = curr->prev;
+	}
+
+	a->prot = prot;
+	return (true);
 }
 
 void arena_print_stats(Arena *a)
@@ -230,7 +199,7 @@ void arena_print_stats(Arena *a)
 			total_used);
 }
 
-char* arena_sprintf(Arena *a, const char *fmt, ...)
+char *arena_sprintf(Arena *a, const char *fmt, ...)
 {
     va_list args, args_copy;
     va_start(args, fmt);
@@ -248,3 +217,47 @@ char* arena_sprintf(Arena *a, const char *fmt, ...)
     return (buffer);
 }
 
+static size_t get_page_size(void)
+{
+	static size_t page_size = 0;
+	if (page_size == 0)
+	{
+		long res = sysconf(_SC_PAGESIZE);
+		page_size = (res > 0) ? (size_t)res : 4096;
+	}
+	return (page_size);
+}
+
+static size_t align_to_page(size_t size)
+{
+	size_t page_size = get_page_size();
+	return (size + page_size - 1) & ~(page_size - 1);
+}
+
+static uintptr_t align_forward(uintptr_t ptr, size_t align)
+{
+	uintptr_t a = (uintptr_t)align;
+	uintptr_t modulo = ptr & (a - 1);
+	if (modulo != 0)
+		ptr += a - modulo;
+	return (ptr);
+}
+
+static ArenaBlock *arena_create_block(size_t capacity, int prot)
+{
+	size_t total_needed = capacity + sizeof(ArenaBlock);
+	size_t total_size = align_to_page(total_needed);
+
+	void *base = mmap(NULL, total_size, prot, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+	if (base == MAP_FAILED)
+		return NULL;
+	
+	ArenaBlock *block = (ArenaBlock *)base;
+	block->prev = NULL;
+	block->size = total_size;
+	block->offset = sizeof(ArenaBlock);
+
+	ASAN_POISON_MEMORY_REGION((char *)base + sizeof(ArenaBlock), total_size - sizeof(ArenaBlock));
+
+	return(block);
+}
