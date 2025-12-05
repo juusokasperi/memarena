@@ -73,13 +73,13 @@ To enable this, compile with -fsanitize=address:
 
 ```bash
 # GCC / Clang
-cc -fsanitize=address -g tester/tester.c memarena.c -o tester 
+cc -fsanitize=address -g tester/tester.c memarena.c -o tester/tester 
 # Tester accepts flags --poison, --align, --all, --help
-./tester 
+./tester/tester
 ```
 Run the tester with poison flag to verify the crash protection:
 ```bash 
-./tester --poison 
+./tester/tester --poison 
 ```
 
 If you try to access memory after `arena_reset` or `arena_temp_end`, your program will crash immediately with a helpful report:
