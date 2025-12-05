@@ -37,6 +37,7 @@ static void poison(void)
 	printf("==================%s\n", RESET);
 	
     Arena a = arena_init(PROT_READ | PROT_WRITE);
+
 #ifdef MEMARENA_DISABLE_RESIZE
 	if (!a.curr)
 	{
@@ -44,10 +45,9 @@ static void poison(void)
 		return;
 	}
 	printf("  %s>> Initialized arena (%d MiB)%s\n", YELLOW, MEMARENA_DEFAULT_SIZE / 1024 / 1024, RESET);
-
 #else
     printf("  %s>> Initialized arena (not allocating yet)%s\n", YELLOW, RESET);
-#endif 
+#endif
 
     printf("  %s>> Allocating a block of %lu bytes%s\n", YELLOW, sizeof(int) * 10, RESET);
     int *nums = arena_alloc(&a, sizeof(int) * 10);
@@ -59,9 +59,7 @@ static void poison(void)
 			sizeof(int) * 10 + sizeof(ArenaBlock));
 	arena_print_stats(&a);
 
-#ifdef MEMARENA_DISABLE_RESIZE
-
-#else
+#ifndef MEMARENA_DISABLE_RESIZE
     printf("  \n%s>> Allocating 70MB%s\n", GREEN_B, RESET);
     void *huge = arena_alloc(&a, 70 * 1024 * 1024);
     if (!huge)
@@ -73,13 +71,12 @@ static void poison(void)
     printf("  %s>> Checking arena statistics%s\n\n", YELLOW, RESET);
 	arena_print_stats(&a);
 #endif
+
     printf("\n  %s>> Resetting arena.%s\n\n", YELLOW, RESET);
     arena_reset(&a);
 	arena_print_stats(&a);
-
     printf("\n  %s>> Attempting to access old memory (expect crash)%s\n", YELLOW, RESET);
     printf("  >> Old value: %d\n", nums[0]); 
-
     arena_free(&a);
 }
 
@@ -89,6 +86,7 @@ static void page_alignment(void)
 	printf("=== Page Alignment Test ===\n");
 	printf("===========================%s\n", RESET);
     Arena a2 = arena_init(PROT_READ | PROT_WRITE);
+
 #ifdef MEMARENA_DISABLE_RESIZE
 	if (!a2.curr)
 	{
@@ -99,8 +97,7 @@ static void page_alignment(void)
     printf("  %s>> Checking stats%s\n\n", YELLOW, RESET);
 	size_t allocation_size = (size_t)(64 * 1024 * 1024) - 16;
 	void *ptr = arena_alloc(&a2, allocation_size);
-#else
-    
+#else  
     size_t weird_size = (size_t)(64 * 1024 * 1024) + 1;
     printf("  %s>> Allocating 64MB + 1 byte (%zu bytes)%s\n", YELLOW, weird_size, RESET);
     
@@ -109,10 +106,8 @@ static void page_alignment(void)
 #endif
     
     arena_print_stats(&a2);
-    
     long page_size = sysconf(_SC_PAGESIZE);
     size_t cap = a2.curr->size;
-    
     if (cap % page_size == 0)
         printf("  \n%s>> SUCCESS: Block size %zu is perfectly divisible by page size %ld%s\n", GREEN_B, cap, page_size, RESET);
     else
@@ -125,7 +120,6 @@ static void page_alignment(void)
     printf("  >> Allocating 1KiB. Should fit in CURRENT block.%s\n", RESET);
     
     ArenaBlock *before_block = a2.curr;
-    
     arena_alloc(&a2, 1024);
 
 #ifdef MEMARENA_DEFAULT_SIZE
