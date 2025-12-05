@@ -1,8 +1,6 @@
 # Memory Arena for C 
 
-- A growable Memory Arena (Region) allocator for C.
-- O(1) allocation speed with infinite growth capabilities. The implementation automatically chains new memory blocks when the current one is full.
-- Integrates directly with AddressSanitizer (ASAN) to catch use-after-free and buffer overflow bugs.
+A growable Memory Arena (Region) allocator for C.
 
 ## Features
 
@@ -12,6 +10,7 @@
 - Page Aware: Automatically aligns large allocations to OS page boundaries (4KB/16KB) to eliminate internal fragmentation.
 - Instant Cleanup: Free millions of objects in O(1) time by freeing the arena or resetting the offset.
 - Thread-Local Ready: Designed to be used as thread-local storage (no internal mutexes for maximum speed).
+- Fixed Mode: Optional compile-time flag `MEM_ARENA_DISABLE_RESIZE` to disable growth and pre-allocate memory.
 
 ## Installation
 
@@ -24,6 +23,7 @@ This is a single-unit library. You do not need to compile a static library.
 ## Usage
 
 ### Basic Allocation
+
 ```c
 
 #include "memarena.h"
@@ -32,8 +32,7 @@ int main() {
     // 1. Initialize (Allocates nothing yet)
     Arena arena = arena_init(PROT_READ | PROT_WRITE);
 
-    // 2. Allocate (Fast!)
-    // No need to check for NULL unless you are out of RAM
+    // 2. Allocate
     int *numbers = arena_alloc(&arena, 1000 * sizeof(int));
     numbers[0] = 55;
 
@@ -74,8 +73,12 @@ To enable this, compile with -fsanitize=address:
 
 ```bash
 # GCC / Clang
-cc -fsanitize=address -g tester.c memarena.c -o tester 
-./tester
+cc -fsanitize=address -g tester/tester.c memarena.c -o tester 
+./tester    // Tester accepts flags --poison, --align, --all, --help
+```
+Run the tester with poison flag to verify the crash protection:
+```bash 
+./tester --poison 
 ```
 
 If you try to access memory after `arena_reset` or `arena_temp_end`, your program will crash immediately with a helpful report:
@@ -84,9 +87,35 @@ If you try to access memory after `arena_reset` or `arena_temp_end`, your progra
 ==12345==ERROR: AddressSanitizer: use-after-poison on address 0x...
 ```
 
+### Configuration
+
+By default, dynamic resizing is enabled. To disable this and effectively allow only one mmap call per arena:
+1. Compile with `-DMEMARENA_DISABLE_RESIZE` (or uncomment the define in `memarena.h`)
+2. Now `arena_init` will allocate the full `MEMARENA_DEFAULT_SIZE` immediately on startup.
+3. `arena_alloc` will return `NULL` if you exceed the fixed size.
+
+When running in fixed mode, you might want to increase the block size.
+
+```c 
+// Usage in fixed Mode
+Arena a = arena_init(PROT_READ | PROT_WRITE);
+if (a.curr == NULL)
+{
+    perror("mmap failed");
+    exit(1);
+    // Or whatever error handling you prefer
+}
+```
+
+You can tweak the default block size in `memarena.h` or by compiling with `-DMEMARENA_DEFAULT_SIZE` if you are working on embedded systems or massive datasets.
+```c 
+// Default is 64MB
+#define MEMARENA_DEFAULT_SIZE (64 * 1024 * 1024)
+```
+
 ### Statistics
 
-You can inspect the efficiency of your arena at any time. This is useful for tuning your ARENA_DEFAULT_SIZE.
+You can inspect the efficiency of your arena at any time. This is useful for tuning your MEMARENA_DEFAULT_SIZE.
 
 ```c 
 arena_print_stats(&arena);
@@ -100,10 +129,3 @@ Arena Stats:
   Used:     70 MB (71680 KiB) [73400408 bytes]
 ```
 
-### Configuration
-
-You can tweak the default block size in memarena.h if you are working on embedded systems or massive datasets.
-```c 
-// Default is 64MB
-#define ARENA_DEFAULT_SIZE (64 * 1024 * 1024)
-```
