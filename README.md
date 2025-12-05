@@ -74,7 +74,8 @@ To enable this, compile with -fsanitize=address:
 ```bash
 # GCC / Clang
 cc -fsanitize=address -g tester/tester.c memarena.c -o tester 
-./tester    // Tester accepts flags --poison, --align, --all, --help
+# Tester accepts flags --poison, --align, --all, --help
+./tester 
 ```
 Run the tester with poison flag to verify the crash protection:
 ```bash 
