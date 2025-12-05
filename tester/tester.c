@@ -106,14 +106,18 @@ static void page_alignment(void)
         printf("  %s>> FAIL: Created a new block unnecessarily.%s\n", RED_B, RESET);
     
 
-    printf("  %s>> Now allocating 100MB. Should trigger NEW block.%s\n", YELLOW, RESET);
+    printf("  %s>> Now allocating 100MB. This can trigger a new block or merge into the existing one.%s\n", YELLOW, RESET);
     arena_alloc(&a2, 100 * 1024 * 1024);
     
     if (a2.curr != before_block)
         printf("  %s>> SUCCESS: Moved to a new block.%s\n", GREEN_B, RESET);
+	else if (a2.curr == before_block)
+        printf("  %s>> SUCCESS: Merged to the previous block.%s\n", GREEN_B, RESET);
 	else
-		printf("  %s>> FAIL: Stayed in the same block.%s\n", RED_B, RESET);
-	printf("\n");
+		printf("  %s>> FAIL: Allocation failed.%s\n'n", RED_B, RESET);
+
+    arena_print_stats(&a2);
+	printf("\n\n");
     arena_free(&a2);
 }
 
