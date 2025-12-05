@@ -73,7 +73,7 @@ void* arena_alloc_aligned(Arena *a, size_t size, size_t align)
 	uintptr_t base_addr = (uintptr_t)a->curr;
 	uintptr_t current_addr = base_addr + a->curr->offset;
 	uintptr_t aligned_addr = align_forward(current_addr, align);
-	size_t padding = aligned_addr - current_addr;;
+	size_t padding = aligned_addr - current_addr;
 
 	if (a->curr->offset + padding + size > a->curr->size)
 	{
