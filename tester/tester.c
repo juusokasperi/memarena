@@ -36,17 +36,32 @@ static void poison(void)
     printf("=== Arena Test ===\n");
 	printf("==================%s\n", RESET);
 	
-    printf("  %s>> Initializing arena (not allocating yet)%s\n", YELLOW, RESET);
     Arena a = arena_init(PROT_READ | PROT_WRITE);
+#ifdef MEMARENA_DISABLE_RESIZE
+	if (!a.curr)
+	{
+		printf("  %s>> FAIL: Allocating block for arena failed.%s\n", RED_B, RESET);
+		return;
+	}
+	printf("  %s>> Initialized arena (%d MiB)%s\n", YELLOW, MEMARENA_DEFAULT_SIZE / 1024 / 1024, RESET);
+
+#else
+    printf("  %s>> Initialized arena (not allocating yet)%s\n", YELLOW, RESET);
+#endif 
 
     printf("  %s>> Allocating a block of %lu bytes%s\n", YELLOW, sizeof(int) * 10, RESET);
     int *nums = arena_alloc(&a, sizeof(int) * 10);
     nums[0] = 42;
     printf("  %s>> Wrote to the block:%s %d\n", YELLOW, RESET, nums[0]);
     printf("  %s>> Checking arena statistics.%s\n", YELLOW, RESET);
-    printf("    >> Expect to see %dMB allocated (our minimum).\n\n", MEMARENA_DEFAULT_SIZE / 1024 / 1024);
+    printf("    >> Expect to see %dMB allocated (our minimum) and %zu bytes used.\n\n", 
+			MEMARENA_DEFAULT_SIZE / 1024 / 1024,
+			sizeof(int) * 10 + sizeof(ArenaBlock));
 	arena_print_stats(&a);
 
+#ifdef MEMARENA_DISABLE_RESIZE
+
+#else
     printf("  \n%s>> Allocating 70MB%s\n", GREEN_B, RESET);
     void *huge = arena_alloc(&a, 70 * 1024 * 1024);
     if (!huge)
@@ -57,6 +72,7 @@ static void poison(void)
 
     printf("  %s>> Checking arena statistics%s\n\n", YELLOW, RESET);
 	arena_print_stats(&a);
+#endif
     printf("\n  %s>> Resetting arena.%s\n\n", YELLOW, RESET);
     arena_reset(&a);
 	arena_print_stats(&a);
@@ -73,13 +89,25 @@ static void page_alignment(void)
 	printf("=== Page Alignment Test ===\n");
 	printf("===========================%s\n", RESET);
     Arena a2 = arena_init(PROT_READ | PROT_WRITE);
+#ifdef MEMARENA_DISABLE_RESIZE
+	if (!a2.curr)
+	{
+		printf("  %s>> FAIL: Allocating block for arena failed.%s\n", RED_B, RESET);
+		return;
+	}
+	printf("  %s>> Initialized arena (%d MiB)%s\n", YELLOW, MEMARENA_DEFAULT_SIZE / 1024 / 1024, RESET);
+    printf("  %s>> Checking stats%s\n\n", YELLOW, RESET);
+	size_t allocation_size = (size_t)(64 * 1024 * 1024) - 16;
+	void *ptr = arena_alloc(&a2, allocation_size);
+#else
     
     size_t weird_size = (size_t)(64 * 1024 * 1024) + 1;
     printf("  %s>> Allocating 64MB + 1 byte (%zu bytes)%s\n", YELLOW, weird_size, RESET);
     
     void *ptr = arena_alloc(&a2, weird_size);
-    
     printf("  %s>> Checking stats (Expect 64MB + 1 Page of capacity)%s\n\n", YELLOW, RESET);
+#endif
+    
     arena_print_stats(&a2);
     
     long page_size = sysconf(_SC_PAGESIZE);
@@ -93,21 +121,34 @@ static void page_alignment(void)
 	printf("\n%s========================\n", GREEN_B);
 	printf("=== Slack Space Test ===\n");
 	printf("========================%s\n", RESET);
-    printf("  %s>> We have ~16KB remaining in the current block.\n", YELLOW);
-    printf("  >> Allocating 1KB. Should fit in CURRENT block (No new node).%s\n", RESET);
+    printf("  %s>> We have ~16KiB remaining in the current block.\n", YELLOW);
+    printf("  >> Allocating 1KiB. Should fit in CURRENT block.%s\n", RESET);
     
     ArenaBlock *before_block = a2.curr;
     
     arena_alloc(&a2, 1024);
-    
+
+#ifdef MEMARENA_DEFAULT_SIZE
+    if (a2.curr == before_block)
+        printf("  %s>> SUCCESS: Allocation succeeded.%s\n", GREEN_B, RESET);
+	else
+        printf("  %s>> FAIL: Allocation failed, pointer returned NULL.%s\n", RED_B, RESET);
+#else
     if (a2.curr == before_block)
         printf("  %s>> SUCCESS: Still in the same block! We used the slack space.%s\n", GREEN_B, RESET);
     else
         printf("  %s>> FAIL: Created a new block unnecessarily.%s\n", RED_B, RESET);
-    
+#endif    
 
+#ifdef MEMARENA_DEFAULT_SIZE
+    printf("  %s>> Now allocating 24KiB. This should fail and return NULL%s\n", YELLOW, RESET);
+    void *ptr2 = arena_alloc(&a2, 24 * 1024);
+	if (ptr2 == NULL)
+        printf("  %s>> SUCCESS: Allocation failed expectedly (out of space). Stats should show ~15KiB still free on the block.%s\n", GREEN_B, RESET);
+	else 
+		printf(" %s>> FAIL: Ptr2 didn't return NULL. Time to debug!%s\n", RED_B, RESET);
+#else
     printf("  %s>> Now allocating 100MB. This can trigger a new block or merge into the existing one.%s\n", YELLOW, RESET);
-    arena_alloc(&a2, 100 * 1024 * 1024);
     
     if (a2.curr != before_block)
         printf("  %s>> SUCCESS: Moved to a new block.%s\n", GREEN_B, RESET);
@@ -115,6 +156,7 @@ static void page_alignment(void)
         printf("  %s>> SUCCESS: Merged to the previous block.%s\n", GREEN_B, RESET);
 	else
 		printf("  %s>> FAIL: Allocation failed.%s\n'n", RED_B, RESET);
+#endif
 
     arena_print_stats(&a2);
 	printf("\n\n");
