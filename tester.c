@@ -1,6 +1,4 @@
 #include "memarena.h"
-#include <stdio.h>
-#include <sys/mman.h>
 
 // cc -fsanitize=address -g tester.c memarena.c -o tester 
 
