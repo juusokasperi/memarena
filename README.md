@@ -96,7 +96,6 @@ By default, dynamic resizing is enabled. To disable this and effectively allow o
 2. Now `arena_init` will allocate the full `MEMARENA_DEFAULT_SIZE` immediately on startup.
 3. `arena_alloc` will return `NULL` if you exceed the fixed size.
 
-When running in fixed mode, you might want to increase the block size.
 
 ```c 
 // Usage in fixed Mode
@@ -109,7 +108,8 @@ if (a.curr == NULL)
 }
 ```
 
-You can tweak the default block size in `memarena.h` or by compiling with `-DMEMARENA_DEFAULT_SIZE` if you are working on embedded systems or massive datasets.
+When running in fixed mode, you might want to increase the block size. You can tweak the default block size in `memarena.h` or by compiling with `-DMEMARENA_DEFAULT_SIZE`.
+
 ```c 
 // Default is 64MB
 #define MEMARENA_DEFAULT_SIZE (64 * 1024 * 1024)
