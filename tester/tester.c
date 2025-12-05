@@ -27,7 +27,7 @@ int main(int argc, char **argv)
 		page_alignment();
 	if (flags & FLAG_POISON)
 		poison();
-    return (1);
+    return (0);
 }
 
 static void poison(void)
