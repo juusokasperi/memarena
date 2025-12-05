@@ -65,7 +65,7 @@ void *arena_alloc_aligned(Arena *a, size_t size, size_t align)
 		return (NULL);
 #else
 		size_t block_size = (size > MEMARENA_DEFAULT_SIZE) ? size : MEMARENA_DEFAULT_SIZE;
-		a->curr = arena_create_block(block_size, a->prot);
+		a->curr = arena_create_block(block_size, a->prot, NULL);
 		if (!a->curr)
 			return (NULL);
 #endif
