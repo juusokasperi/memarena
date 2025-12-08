@@ -35,6 +35,13 @@
 #define MEMARENA_VERSION_MINOR 0
 #define MEMARENA_VERSION_PATCH 0
 
+#define MEMARENA_STR_HELPER(x) #x
+#define MEMARENA_STR(x) MEMARENA_STR_HELPER(x)
+#define MEMARENA_VERSION_STRING \
+    MEMARENA_STR(MEMARENA_VERSION_MAJOR) "." \
+    MEMARENA_STR(MEMARENA_VERSION_MINOR) "." \
+    MEMARENA_STR(MEMARENA_VERSION_PATCH)
+
 // Helper to bundle version info
 typedef struct {
 	int	major;
@@ -129,6 +136,11 @@ char			*arena_sprintf(Arena *a, const char *fmt, ...) __attribute__((format(prin
 #ifdef MEMARENA_IMPLEMENTATION
 
 /* --- Internal static helpers --- */
+// Forces the string "MEMARENA_VERSION_x.x.x" into the binary data
+#ifndef NDEBUG
+ static const char *volatile memarena_version_tag __attribute__((used)) = "MEMARENA_VERSION_" MEMARENA_VERSION_STRING;
+#endif
+
 static size_t get_page_size(void) {
     static size_t page_size = 0;
     if (page_size == 0)
