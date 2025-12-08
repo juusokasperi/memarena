@@ -134,6 +134,8 @@ char			*arena_sprintf(Arena *a, const char *fmt, ...) __attribute__((format(prin
 /* ========================================================================= */
 
 #ifdef MEMARENA_IMPLEMENTATION
+#ifndef MEMARENA_IMPLEMENTATION_GUARD
+#define MEMARENA_IMPLEMENTATION_GUARD
 
 /* --- Internal static helpers --- */
 // Forces the string "MEMARENA_VERSION_x.x.x" into the binary data
@@ -414,4 +416,5 @@ char *arena_sprintf(Arena *a, const char *fmt, ...)
     return (buffer);
 }
 
+#endif // MEMARENA_IMPLEMENTATION_GUARD
 #endif // MEMARENA_IMPLEMENTATION
