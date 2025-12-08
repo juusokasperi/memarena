@@ -6,7 +6,7 @@ A growable Memory Arena (Region) allocator for C.
 
 - O(1) allocation: allocation is just a pointer bump.
 - Infinite growth: Uses a linked list of mmap'd blocks. Never runs out of memory until the OS does.
-- Contiguous merging: Attemps to merge new memory blocks adjacent to the previous block. If successful, this extends the previous block's virtual memory range instead of appending to the linked list, reducing fragmentation.
+- Contiguous merging: Attempts to merge new memory blocks adjacent to the previous block. If successful, this extends the previous block's virtual memory range instead of appending to the linked list, reducing fragmentation.
 - ASAN Integration: Manually "poisons" unused memory. If you access memory you haven't allocated (or after a reset), ASAN will crash your program with a precise error.
 - Page aware: Automatically aligns large allocations to OS page boundaries (4KB/16KB) to eliminate internal fragmentation.
 - Instant cleanup: Free millions of objects in O(1) time by freeing the arena or resetting the offset.
@@ -15,11 +15,18 @@ A growable Memory Arena (Region) allocator for C.
 
 ## Installation
 
-This is a single-unit library. You do not need to compile a static library.
+This is a single-header library.
 
-1. Copy memarena.c and memarena.h into your project.
-2. Include memarena.h where needed.
-3. Add memarena.c to your build sources.
+1. Copy memarena.h into your project.
+2. In **one** file (e.g. `main.c`) define `MEMARENA_IMPLEMENTATION` *before* including the header
+```c
+#define MEMARENA_IMPLEMENTATION
+#include "memarena.h"
+```
+3. In the rest of your files, just include normally.
+```c
+#include "memarena.h"
+```
 
 ## Usage
 
@@ -74,7 +81,7 @@ To enable this, compile with -fsanitize=address:
 
 ```bash
 # GCC / Clang
-cc -fsanitize=address -g tester/tester.c memarena.c -o tester/tester 
+cc -fsanitize=address -g tester/tester.c -o tester/memarena_tester 
 # Tester accepts flags --poison, --align, --all, --help
 ./tester/tester
 ```
@@ -125,11 +132,11 @@ You can inspect the efficiency of your arena at any time. This is useful for tun
 arena_print_stats(&arena);
 ```
 
-```plaintext
+```bash
 Arena Stats:
   OS Page size: 16KiB
-  Blocks:   2
-  Capacity: 134 MB (137248 KiB)
-  Used:     70 MB (71680 KiB) [73400408 bytes]
+  Blocks:   1
+  Capacity: 64 MB (65552 KiB) [67125248 bytes]
+  Used:     64 MB (65537 KiB) [67109896 bytes]
 ```
 

@@ -1,6 +1,8 @@
+#define MEMARENA_IMPLEMENTATION
 #include "../memarena.h"
 
-// cc -fsanitize=address -g tester/tester.c memarena.c -o tester 
+// Run from root of repo:
+// cc (-DMEMARENA_DISABLE_RESIZE) -fsanitize=address -g tester/tester.c -o tester/memarena_tester
 
 #define YELLOW "\033[0;93m"
 #define GREEN_B "\033[1;92m"
@@ -14,9 +16,13 @@
 static void page_alignment(void);
 static void poison(void);
 static uint8_t check_flags(int argc, char **argv);
+static bool check_version_match(void);
 
 int main(int argc, char **argv)
 {
+	if (!check_version_match())
+		return (1);
+
 	if (argc < 2)
 	{
 		page_alignment();
@@ -122,7 +128,7 @@ static void page_alignment(void)
     ArenaBlock *before_block = a2.curr;
     arena_alloc(&a2, 1024);
 
-#ifdef MEMARENA_DEFAULT_SIZE
+#ifdef MEMARENA_DISABLE_RESIZE
     if (a2.curr == before_block)
         printf("  %s>> SUCCESS: Allocation succeeded.%s\n", GREEN_B, RESET);
 	else
@@ -134,7 +140,7 @@ static void page_alignment(void)
         printf("  %s>> FAIL: Created a new block unnecessarily.%s\n", RED_B, RESET);
 #endif    
 
-#ifdef MEMARENA_DEFAULT_SIZE
+#ifdef MEMARENA_DISABLE_RESIZE
     printf("  %s>> Now allocating 24KiB. This should fail and return NULL%s\n", YELLOW, RESET);
     void *ptr2 = arena_alloc(&a2, 24 * 1024);
 	if (ptr2 == NULL)
@@ -187,4 +193,18 @@ static uint8_t check_flags(int argc, char **argv)
 			printf("%sWarning%s: Invalid flag %s\n", "\033[0;91m", "\033[0m", argv[i]);
 	}
 	return (flags);
+}
+
+static bool check_version_match(void)
+{
+    MemArenaVersion v = memarena_get_version();
+    printf("%s>> Memory Arena Version: %d.%d.%d%s\n", YELLOW, v.major, v.minor, v.patch, RESET);
+
+    if (v.major != MEMARENA_VERSION_MAJOR && v.minor != MEMARENA_VERSION_MINOR)
+	{
+        printf("%s>> FAIL: Version mismatch! Header is %d, Binary is %d%s\n", 
+               RED_B, MEMARENA_VERSION_MAJOR, v.major, RESET);
+        return (false);
+    }
+	return (true);
 }
