@@ -11,7 +11,7 @@ A growable Memory Arena (Region) allocator for C.
 - Page aware: Automatically aligns large allocations to OS page boundaries (4KB/16KB) to eliminate internal fragmentation.
 - Instant cleanup: Free millions of objects in O(1) time by freeing the arena or resetting the offset.
 - Thread-Local ready: Designed to be used as thread-local storage (no internal mutexes for maximum speed).
-- Fixed mode: Optional compile-time flag `MEM_ARENA_DISABLE_RESIZE` to disable growth and pre-allocate memory.
+- Fixed mode: Optional compile-time flag `MEMARENA_DISABLE_RESIZE` to disable growth and pre-allocate memory.
 
 ## Installation
 
