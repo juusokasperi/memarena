@@ -122,7 +122,7 @@ void			arena_temp_end(ArenaTemp temp);
 size_t			arena_total_used(Arena *a);
 bool			arena_set_prot(Arena *a, int prot);
 void			arena_print_stats(Arena *a);
-MemArenaVersion	get_arena_version(void);
+MemArenaVersion	arena_get_version(void);
 
 // Sprintf that allocates to the arena
 char			*arena_sprintf(Arena *a, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
@@ -390,7 +390,7 @@ void arena_print_stats(Arena *a)
 			total_used);
 }
 
-MemArenaVersion memarena_get_version(void)
+MemArenaVersion arena_get_version(void)
 {
     MemArenaVersion v = { 
         MEMARENA_VERSION_MAJOR, 
