@@ -1,3 +1,4 @@
 *.dSym
 tester/tester
 memarena_tester
+.DS_Store
