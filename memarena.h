@@ -314,7 +314,7 @@ void *arena_realloc(Arena *a, void *ptr, size_t old_size, size_t new_size)
 void *arena_realloc_aligned(Arena *a, void *ptr, size_t old_size, size_t new_size, size_t align)
 {
 	if (ptr == NULL)
-		return (arena_alloc(a, new_size));
+		return (arena_alloc_aligned(a, new_size, align));
 
 	if (new_size == old_size)
 		return (ptr);
@@ -338,7 +338,7 @@ void *arena_realloc_aligned(Arena *a, void *ptr, size_t old_size, size_t new_siz
 		return (ptr);
 	}
 
-	/* Check if the already allocated block is aligned with the variable align
+	/* Check if the already allocated block is aligned with the variable align */
 	if (((uintptr_t)ptr & (align - 1)) == 0)
 	{
 		/* Shrink (no-op) */
