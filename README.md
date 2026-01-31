@@ -82,7 +82,7 @@ int main() {
     Arena arena = arena_init(PROT_READ | PROT_WRITE);
 
     {
-    // 1. Use with default alignmentz
+    // 1. Use with default alignment
     int *numbers = arena_alloc(&arena, 1000 * sizeof(int));
     numbers = arena_realloc(&arena, &numbers, 1000*sizeof(int), 2000*sizeof(int));
     }
