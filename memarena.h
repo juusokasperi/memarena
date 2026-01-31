@@ -1,6 +1,6 @@
 /*
    ----------------------------------------------------------------------------
-   MEMARENA.H v1.0.0
+   MEMARENA.H v1.1.0
    ----------------------------------------------------------------------------
    Growing memory arena using mmap and linked lists with ASAN support.
    
@@ -32,7 +32,7 @@
 
 /* --- Versioning --- */
 #define MEMARENA_VERSION_MAJOR 1
-#define MEMARENA_VERSION_MINOR 0
+#define MEMARENA_VERSION_MINOR 1
 #define MEMARENA_VERSION_PATCH 0
 
 #define MEMARENA_STR_HELPER(x) #x
@@ -115,6 +115,9 @@ void			arena_reset(Arena *a);
 void			*arena_alloc(Arena *a, size_t size);
 void			*arena_alloc_aligned(Arena *a, size_t size, size_t align);
 void			*arena_alloc_zeroed(Arena *a, size_t size);
+
+void			*arena_realloc(Arena *a, void *ptr, size_t old_size, size_t new_size);
+void			*arena_realloc_aligned(Arena *a, void *ptr, size_t old_size, size_t new_size, size_t align);
 
 ArenaTemp		arena_temp_begin(Arena *a);
 void			arena_temp_end(ArenaTemp temp);
@@ -301,6 +304,66 @@ void *arena_alloc_zeroed(Arena *a, size_t size)
     if (ptr)
 		memset(ptr, 0, size);
     return (ptr);
+}
+
+void *arena_realloc(Arena *a, void *ptr, size_t old_size, size_t new_size)
+{
+	return (arena_realloc_aligned(a, ptr, old_size, new_size, DEFAULT_ALIGNMENT));
+}
+
+void *arena_realloc_aligned(Arena *a, void *ptr, size_t old_size, size_t new_size, size_t align)
+{
+	if (ptr == NULL)
+		return (arena_alloc_aligned(a, new_size, align));
+
+	bool is_aligned = ((uintptr_t)ptr & (align - 1)) == 0;
+
+	/* Check for shrink / free / no-op */
+	if (new_size <= old_size && is_aligned)
+	{
+		if (new_size < old_size && a->curr)
+		{
+			uintptr_t base_addr = (uintptr_t)a->curr;
+			uintptr_t arena_top = base_addr + a->curr->offset;
+			uintptr_t ptr_end = (uintptr_t)ptr + old_size;
+			
+			if (ptr_end == arena_top)
+			{
+				size_t diff = old_size - new_size;
+				a->curr->offset -= diff;
+    			ASAN_POISON_MEMORY_REGION((char *)ptr + new_size, diff);
+			}
+		}
+		return ((new_size == 0) ? NULL : ptr);
+	}
+
+	/* Check for in-place growth */
+	if (a->curr && is_aligned)
+	{
+		uintptr_t base_addr = (uintptr_t)a->curr;
+		uintptr_t arena_top = base_addr + a->curr->offset;
+		uintptr_t ptr_end = (uintptr_t)ptr + old_size;
+
+		if (ptr_end == arena_top)
+		{
+			size_t diff = new_size - old_size;
+			if (a->curr->offset + diff <= a->curr->size)
+			{
+				a->curr->offset += diff;
+				ASAN_UNPOISON_MEMORY_REGION((void *)ptr_end, diff);
+				return (ptr);
+			}
+		}
+	}
+
+	/* Fallback; allocate a new block and copy the old contents */
+	void *new_ptr = arena_alloc_aligned(a, new_size, align);
+	if (new_ptr)
+	{
+		size_t copy_size = (old_size < new_size) ? old_size : new_size;
+		memcpy(new_ptr, ptr, copy_size);
+	}
+	return (new_ptr);
 }
 
 ArenaTemp arena_temp_begin(Arena *a)
