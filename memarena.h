@@ -359,7 +359,10 @@ void *arena_realloc_aligned(Arena *a, void *ptr, size_t old_size, size_t new_siz
 	/* Fallback; allocate a new block and copy the old contents */
 	void *new_ptr = arena_alloc_aligned(a, new_size, align);
 	if (new_ptr)
-		memcpy(new_ptr, ptr, old_size);
+	{
+		size_t copy_size = (old_size < new_size) ? old_size : new_size;
+		memcpy(new_ptr, ptr, copy_size);
+	}
 	return (new_ptr);
 }
 
