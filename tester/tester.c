@@ -11,12 +11,14 @@
 
 #define FLAG_POISON 0x01 
 #define FLAG_ALIGN 0x02 
+#define FLAG_REALLOC 0x03
 #define FLAG_ALL 0xFF
 
 static void page_alignment(void);
 static void poison(void);
 static uint8_t check_flags(int argc, char **argv);
 static bool check_version_match(void);
+static void test_realloc(void);
 
 int main(int argc, char **argv)
 {
@@ -26,6 +28,7 @@ int main(int argc, char **argv)
 	if (argc < 2)
 	{
 		page_alignment();
+		test_realloc();
 		return (0);
 	}
 	uint8_t flags = check_flags(argc, argv);
@@ -33,6 +36,8 @@ int main(int argc, char **argv)
 		page_alignment();
 	if (flags & FLAG_POISON)
 		poison();
+	if (flags & FLAG_REALLOC)
+		test_realloc();
     return (0);
 }
 
@@ -150,7 +155,7 @@ static void page_alignment(void)
 #else
     printf("  %s>> Now allocating 100MB. This can trigger a new block or merge into the existing one.%s\n", YELLOW, RESET);
     
-    if (a2.curr != before_block)
+	if (a2.curr != before_block)
         printf("  %s>> SUCCESS: Moved to a new block.%s\n", GREEN_B, RESET);
 	else if (a2.curr == before_block)
         printf("  %s>> SUCCESS: Merged to the previous block.%s\n", GREEN_B, RESET);
@@ -161,6 +166,58 @@ static void page_alignment(void)
     arena_print_stats(&a2);
 	printf("\n\n");
     arena_free(&a2);
+}
+
+static void test_realloc(void)
+{
+	printf("%s====================\n", GREEN_B);
+    printf("=== Realloc Test ===\n");
+    printf("====================%s\n", RESET);
+    
+    Arena a = arena_init(PROT_READ | PROT_WRITE);
+    
+    // 1. Test In-place Growth (last allocation)
+    printf("  %s>> Testing in-place growth...%s\n", YELLOW, RESET);
+    size_t initial_size = 128;
+    size_t growth_size = 256;
+    void *ptr1 = arena_alloc(&a, initial_size);
+    memset(ptr1, 0xAA, initial_size);
+    
+    void *ptr1_new = arena_realloc(&a, ptr1, initial_size, growth_size);
+    
+    if (ptr1 == ptr1_new)
+        printf("  %s>> SUCCESS: Realloc stayed in place for last allocation.%s\n", GREEN_B, RESET);
+    else
+        printf("  %s>> FAIL: Realloc moved despite being the last allocation.%s\n", RED_B, RESET);
+
+    // 2. Test Fallback (not the last allocation)
+    printf("  %s>> Testing fallback allocation...%s\n", YELLOW, RESET);
+    void *ptr2 = arena_alloc(&a, 64); // This is now the "top" of the arena
+    // Try to grow ptr1 again; since ptr2 is after it, it must move
+    void *ptr1_moved = arena_realloc(&a, ptr1_new, growth_size, growth_size * 2);
+    
+	if (ptr1_moved != ptr1_new)
+	{
+        printf("  %s>> SUCCESS: Fallback triggered (pointer moved) correctly.%s\n", GREEN_B, RESET);
+        // Verify data integrity
+        if (((unsigned char*)ptr1_moved)[0] == 0xAA)
+            printf("  %s>> SUCCESS: Data preserved after move.%s\n", GREEN_B, RESET);
+	} 
+	else
+        printf("  %s>> FAIL: Realloc stayed in place even though memory was blocked.%s\n", RED_B, RESET);
+
+    // 3. Test Alignment
+    printf("  %s>> Testing aligned realloc...%s\n", YELLOW, RESET);
+    size_t align = 64;
+    void *ptr3 = arena_alloc_aligned(&a, 32, align);
+    void *ptr3_grown = arena_realloc_aligned(&a, ptr3, 32, 128, align);
+    
+    if (((uintptr_t)ptr3_grown % align) == 0)
+        printf("  %s>> SUCCESS: Grown pointer is still aligned to %zu.%s\n", GREEN_B, align, RESET);
+    else
+        printf("  %s>> FAIL: Grown pointer lost alignment (%zu)!%s\n", RED_B, align, RESET);
+
+    arena_free(&a);
 }
 
 static uint8_t check_flags(int argc, char **argv)
@@ -176,6 +233,8 @@ static uint8_t check_flags(int argc, char **argv)
 			flags |= FLAG_POISON;
 		else if (strcmp(argv[i], "--align") == 0)
 			flags |= FLAG_ALIGN;
+		else if (strcmp(argv[i], "--realloc") == 0)
+			flags |= FLAG_REALLOC;
 		else if (strcmp(argv[i], "--all") == 0)
 			flags = FLAG_ALL;
 		else if (strcmp(argv[i], "--help") == 0)
@@ -183,8 +242,8 @@ static uint8_t check_flags(int argc, char **argv)
 			if (!help_printed)
 			{
 				printf("%sHow to use tester:%s\n", GREEN_B, RESET);
-				printf("Accepts flags --poison, --align, --all, --help\n");
-				printf("By default, runs with --align\n");
+				printf("Accepts flags --poison, --align, --realloc, --all, --help\n");
+				printf("By default, runs with --align and --realloc\n");
 				printf("Remember to compile with -g and -fsanitize=address for the poison test\n");
 				help_printed = true;
 			}
@@ -197,7 +256,7 @@ static uint8_t check_flags(int argc, char **argv)
 
 static bool check_version_match(void)
 {
-    MemArenaVersion v = memarena_get_version();
+    MemArenaVersion v = arena_get_version();
     printf("%s>> Memory Arena Version: %d.%d.%d%s\n", YELLOW, v.major, v.minor, v.patch, RESET);
 
     if (v.major != MEMARENA_VERSION_MAJOR && v.minor != MEMARENA_VERSION_MINOR)
