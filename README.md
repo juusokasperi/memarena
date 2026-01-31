@@ -75,7 +75,7 @@ void parse_file(Arena *a) {
 
 ### Realloc
 
-Use "realloc" to grow or free the block. This works only if the block you are reallocing was the last thing that was allocated, and if the current ArenaBlock has enough space. If this is not the case, realloc just allocates a new block and copies the contents from the old block to that address.
+Use "realloc" to grow or free the block. This works only if the block you are reallocing was the last thing that was allocated, and if the current ArenaBlock has enough space. If this is not the case, realloc just allocates a new block and copies the contents from the old block to that address. This can be useful when f.ex. parsing data into [vector](https://www.github.com/juusokasperi/vector).
 
 ```c
 int main() {
@@ -92,6 +92,7 @@ int main() {
     numbers = arena_realloc(&arena, &numbers, 1000*sizeof(int), 2000*sizeof(int), 32);
     }
 }
+```
 
 ### Debugging & Safety
 
