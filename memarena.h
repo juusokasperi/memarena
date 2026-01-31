@@ -32,7 +32,7 @@
 
 /* --- Versioning --- */
 #define MEMARENA_VERSION_MAJOR 1
-#define MEMARENA_VERSION_MINOR 0
+#define MEMARENA_VERSION_MINOR 1
 #define MEMARENA_VERSION_PATCH 0
 
 #define MEMARENA_STR_HELPER(x) #x
