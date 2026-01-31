@@ -84,12 +84,12 @@ int main() {
     {
     // 1. Use with default alignment
     int *numbers = arena_alloc(&arena, 1000 * sizeof(int));
-    numbers = arena_realloc(&arena, &numbers, 1000*sizeof(int), 2000*sizeof(int));
+    numbers = arena_realloc(&arena, numbers, 1000*sizeof(int), 2000*sizeof(int));
     }
     {  
     // 2. Use with manual alignment
     int *numbers = arena_alloc_aligned(&arena, 1000 * sizeof(int), 32);
-    numbers = arena_realloc(&arena, &numbers, 1000*sizeof(int), 2000*sizeof(int), 32);
+    numbers = arena_realloc_aligned(&arena, numbers, 1000*sizeof(int), 2000*sizeof(int), 32);
     }
 }
 ```
