@@ -316,18 +316,23 @@ void *arena_realloc_aligned(Arena *a, void *ptr, size_t old_size, size_t new_siz
 	if (ptr == NULL)
 		return (arena_alloc(a, new_size));
 
+	if (new_size == old_size)
+		return (ptr);
+
 	/* Check if we can reclaim the data (free) */
-	if (new_size == 0)
+	if (new_size < old_size)
 	{
 		if (a->curr)
 		{
 			uintptr_t base_addr = (uintptr_t)a->curr;
 			uintptr_t arena_top = base_addr + a->curr->offset;
 			uintptr_t ptr_end = (uintptr_t)ptr + old_size;
+
 			if (ptr_end == arena_top)
 			{
-				a->curr->offset -= old_size;
-    			ASAN_POISON_MEMORY_REGION(ptr, old_size);
+				size_t diff = old_size - new_size;
+				a->curr->offset -= diff;
+    			ASAN_POISON_MEMORY_REGION((char *)ptr + new_size, diff);
 			}
 		}
 		return (ptr);
@@ -360,7 +365,7 @@ void *arena_realloc_aligned(Arena *a, void *ptr, size_t old_size, size_t new_siz
 	}
 
 	/* Fallback; allocate a new block and copy the old contents */
-	void *new_ptr = arena_alloc(a, new_size);
+	void *new_ptr = arena_alloc_aligned(a, new_size, align);
 	if (new_ptr)
 		memcpy(new_ptr, ptr, old_size);
 	return (new_ptr);
