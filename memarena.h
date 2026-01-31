@@ -116,6 +116,9 @@ void			*arena_alloc(Arena *a, size_t size);
 void			*arena_alloc_aligned(Arena *a, size_t size, size_t align);
 void			*arena_alloc_zeroed(Arena *a, size_t size);
 
+void			*arena_realloc(Arena *a, void *ptr, size_t old_size, size_t new_size);
+void			*arena_realloc_aligned(Arena *a, void *ptr, size_t old_size, size_t new_size, size_t align);
+
 ArenaTemp		arena_temp_begin(Arena *a);
 void			arena_temp_end(ArenaTemp temp);
 
@@ -301,6 +304,66 @@ void *arena_alloc_zeroed(Arena *a, size_t size)
     if (ptr)
 		memset(ptr, 0, size);
     return (ptr);
+}
+
+void *arena_realloc(Arena *a, void *ptr, size_t old_size, size_t new_size)
+{
+	return (arena_realloc_aligned(a, ptr, old_size, new_size, DEFAULT_ALIGNMENT));
+}
+
+void *arena_realloc_aligned(Arena *a, void *ptr, size_t old_size, size_t new_size, size_t align)
+{
+	if (ptr == NULL)
+		return (arena_alloc(a, new_size));
+
+	/* Check if we can reclaim the data (free) */
+	if (new_size == 0)
+	{
+		if (a->curr)
+		{
+			uintptr_t base_addr = (uintptr_t)a->curr;
+			uintptr_t arena_top = base_addr + a->curr->offset;
+			uintptr_t ptr_end = (uintptr_t)ptr + old_size;
+			if (ptr_end == arena_top)
+			{
+				a->curr->offset -= old_size;
+    			ASAN_POISON_MEMORY_REGION(ptr, old_size);
+			}
+		}
+		return (ptr);
+	}
+
+	/* Check if the already allocated block is aligned with the variable align
+	if (((uintptr_t)ptr & (align - 1)) == 0)
+	{
+		/* Shrink (no-op) */
+		if (new_size <= old_size)
+			return (ptr);
+	
+		/* Check if we can grow in place */
+		if (a->curr)
+		{
+			uintptr_t base_addr = (uintptr_t)a->curr;
+			uintptr_t arena_top = base_addr + a->curr->offset;
+			uintptr_t ptr_end = (uintptr_t)ptr + old_size;
+			if (ptr_end == arena_top)
+			{
+				size_t diff = new_size - old_size;
+				if (a->curr->offset + diff <= a->curr->size)
+				{
+					a->curr->offset += diff;
+					ASAN_UNPOISON_MEMORY_REGION((void *)ptr_end, diff);
+					return (ptr);
+				}
+			}
+		}
+	}
+
+	/* Fallback; allocate a new block and copy the old contents */
+	void *new_ptr = arena_alloc(a, new_size);
+	if (new_ptr)
+		memcpy(new_ptr, ptr, old_size);
+	return (new_ptr);
 }
 
 ArenaTemp arena_temp_begin(Arena *a)
