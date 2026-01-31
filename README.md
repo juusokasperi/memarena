@@ -73,6 +73,26 @@ void parse_file(Arena *a) {
 }
 ```
 
+### Realloc
+
+Use "realloc" to grow or free the block. This works only if the block you are reallocing was the last thing that was allocated, and if the current ArenaBlock has enough space. If this is not the case, realloc just allocates a new block and copies the contents from the old block to that address.
+
+```c
+int main() {
+    Arena arena = arena_init(PROT_READ | PROT_WRITE);
+
+    {
+    // 1. Use with default alignmentz
+    int *numbers = arena_alloc(&arena, 1000 * sizeof(int));
+    numbers = arena_realloc(&arena, &numbers, 1000*sizeof(int), 2000*sizeof(int));
+    }
+    {  
+    // 2. Use with manual alignment
+    int *numbers = arena_alloc_aligned(&arena, 1000 * sizeof(int), 32);
+    numbers = arena_realloc(&arena, &numbers, 1000*sizeof(int), 2000*sizeof(int), 32);
+    }
+}
+
 ### Debugging & Safety
 
 Memarena tells ASAN which bytes are valid and which are "poison." 
