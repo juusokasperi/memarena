@@ -1,6 +1,6 @@
 /*
    ----------------------------------------------------------------------------
-   MEMARENA.H v1.0.0
+   MEMARENA.H v1.1.0
    ----------------------------------------------------------------------------
    Growing memory arena using mmap and linked lists with ASAN support.
    
@@ -316,18 +316,17 @@ void *arena_realloc_aligned(Arena *a, void *ptr, size_t old_size, size_t new_siz
 	if (ptr == NULL)
 		return (arena_alloc_aligned(a, new_size, align));
 
-	if (new_size == old_size)
-		return (ptr);
+	bool is_aligned = ((uintptr_t)ptr & (align - 1)) == 0;
 
-	/* Check if we can reclaim the data (free) */
-	if (new_size < old_size)
+	/* Check for shrink / free / no-op */
+	if (new_size <= old_size && is_aligned)
 	{
-		if (a->curr)
+		if (new_size < old_size && a->curr)
 		{
 			uintptr_t base_addr = (uintptr_t)a->curr;
 			uintptr_t arena_top = base_addr + a->curr->offset;
 			uintptr_t ptr_end = (uintptr_t)ptr + old_size;
-
+			
 			if (ptr_end == arena_top)
 			{
 				size_t diff = old_size - new_size;
@@ -335,31 +334,24 @@ void *arena_realloc_aligned(Arena *a, void *ptr, size_t old_size, size_t new_siz
     			ASAN_POISON_MEMORY_REGION((char *)ptr + new_size, diff);
 			}
 		}
-		return (ptr);
+		return ((new_size == 0) ? NULL : ptr);
 	}
 
-	/* Check if the already allocated block is aligned with the variable align */
-	if (((uintptr_t)ptr & (align - 1)) == 0)
+	/* Check for in-place growth */
+	if (a->curr && is_aligned)
 	{
-		/* Shrink (no-op) */
-		if (new_size <= old_size)
-			return (ptr);
-	
-		/* Check if we can grow in place */
-		if (a->curr)
+		uintptr_t base_addr = (uintptr_t)a->curr;
+		uintptr_t arena_top = base_addr + a->curr->offset;
+		uintptr_t ptr_end = (uintptr_t)ptr + old_size;
+
+		if (ptr_end == arena_top)
 		{
-			uintptr_t base_addr = (uintptr_t)a->curr;
-			uintptr_t arena_top = base_addr + a->curr->offset;
-			uintptr_t ptr_end = (uintptr_t)ptr + old_size;
-			if (ptr_end == arena_top)
+			size_t diff = new_size - old_size;
+			if (a->curr->offset + diff <= a->curr->size)
 			{
-				size_t diff = new_size - old_size;
-				if (a->curr->offset + diff <= a->curr->size)
-				{
-					a->curr->offset += diff;
-					ASAN_UNPOISON_MEMORY_REGION((void *)ptr_end, diff);
-					return (ptr);
-				}
+				a->curr->offset += diff;
+				ASAN_UNPOISON_MEMORY_REGION((void *)ptr_end, diff);
+				return (ptr);
 			}
 		}
 	}
