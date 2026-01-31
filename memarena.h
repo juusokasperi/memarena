@@ -313,6 +313,8 @@ void *arena_realloc(Arena *a, void *ptr, size_t old_size, size_t new_size)
 
 void *arena_realloc_aligned(Arena *a, void *ptr, size_t old_size, size_t new_size, size_t align)
 {
+	if (!is_power_of_two(align))
+		return (NULL);
 	if (ptr == NULL)
 		return (arena_alloc_aligned(a, new_size, align));
 
